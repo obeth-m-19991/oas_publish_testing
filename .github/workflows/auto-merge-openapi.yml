@@ -1,38 +1,40 @@
-name: Auto Merge OpenAPI Spec
+name: Auto Merge OpenAPI PR (ci-bot only)
 
 on:
   pull_request:
     branches:
       - main
-    types: [opened, synchronize, reopened]
+    types: [opened, reopened, synchronize]
 
 jobs:
   validate-and-merge:
-    if: github.actor == 'obeth-m-19991'  # Replace with your bot's username
+    if: github.event.pull_request.user.login == 'obeth-m-19991'  # 👈 Run only if PR author is obeth-m-19991
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
 
     steps:
-      - name: Checkout PR code
+      - name: Checkout PR branch
         uses: actions/checkout@v4
-        
-      - name: Auto-merge PR
+
+      - name: (Optional) Validate OpenAPI spec
+        run: |
+          pip install openapi-spec-validator
+          openapi-spec-validator openapi.yaml
+
+      - name: Auto-merge PR using PAT
         uses: actions/github-script@v7
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
         with:
           script: |
-            const pr = await github.rest.pulls.get({
+            const pr = context.payload.pull_request;
+            console.log(`Merging PR #${pr.number} from obeth-m-19991`);
+            await github.rest.pulls.merge({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              pull_number: context.payload.pull_request.number,
+              pull_number: pr.number,
+              merge_method: 'squash',
+              commit_title: 'Automated OpenAPI spec update'
             });
-
-            if (pr.data.user.login === 'obeth-m-19991') {
-              await github.rest.pulls.merge({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                pull_number: context.payload.pull_request.number,
-                merge_method: 'squash',
-              });
-              console.log("PR merged successfully.");
-            } else {
-              console.log("PR not from CI bot, skipping merge.");
-            }
